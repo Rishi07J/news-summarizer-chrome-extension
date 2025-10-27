@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'self'">
+  <title>NewsSummarizer</title>
+  <style>
+    :root{
+      --popup-width:360px;
+      --popup-max-height:480px;
+      --bg:#ffffff; --panel:#f7f8fb; --text:#111827; --muted:#6b7280; --accent:#0b67d0;
+      --card:#ffffff; --border:#e6e9ef; --snap-active-bg:#0b67d0; --snap-active-color:#fff;
+      --control-padding:6px 8px; --btn-font:12px;
+      --suggestion-bg: #eef6ff; --suggestion-color: #0b67d0;
+    }
+    .dark{
+      --bg:#071025; --panel:#081428; --text:#e6eef8; --muted:#9aa7b8; --accent:#3ea6ff;
+      --card:#071229; --border:#122233; --snap-active-bg:#3ea6ff; --snap-active-color:#012034;
+      --suggestion-bg:#073450; --suggestion-color:#bfe7ff;
+    }
+
+    html,body{
+      margin:0;padding:0;
+      width:var(--popup-width);
+      height:auto;
+      max-height:var(--popup-max-height);
+      font-family:Inter,Segoe UI,Arial,Helvetica,sans-serif;
+      background:var(--bg);color:var(--text);
+      box-sizing:border-box; position:relative; overflow:auto;
+    }
+
+    .container{ padding:8px; display:flex; flex-direction:column; gap:6px; box-sizing:border-box; }
+
+    .top{display:flex;gap:6px;align-items:center}
+    .favicon{width:36px;height:36px;border-radius:6px;background:#eee;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
+    .titleblock{flex:1;min-width:0}
+    .title{font-weight:700;font-size:13px;line-height:1.05;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meta{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    .controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .controls-left{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    button{padding:var(--control-padding);border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:var(--btn-font);color:var(--text)}
+    button.primary{background:var(--accent);color:white;border:none}
+    .snap-btn{padding:5px 7px;font-size:11px;border-radius:8px;border:1px solid var(--border);background:transparent}
+    .snap-btn.snap-active{background:var(--snap-active-bg);color:var(--snap-active-color);border-color:transparent}
+
+    /* Summary card: now supports scrolling when content exceeds its area */
+    .summary-card{background:var(--panel);padding:8px;border-radius:8px;border:1px solid var(--border);overflow:visible}
+    .summary{
+      font-size:12px;line-height:1.35;color:var(--text);
+      display:block; white-space:normal; overflow:auto;
+      /* default max height uses popup max height fraction; adjusted dynamically via JS too */
+      max-height: calc(var(--popup-max-height) * 0.22);
+      padding-right:6px; /* avoid scrollbar overlap */
+    }
+
+    .save-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    input[type="text"],select{padding:6px;border-radius:8px;border:1px solid var(--border);flex:1;background:var(--card);color:var(--text);min-width:0}
+    .tags-input{min-width:80px;max-width:160px;font-size:12px;padding:6px}
+
+    .divider{height:1px;background:var(--border);border-radius:2px;margin:6px 0}
+
+    .muted{color:var(--muted);font-size:11px}
+    .empty{color:var(--muted);font-size:12px;padding:8px;text-align:center}
+
+    .save-mode{position:fixed;left:8px;right:8px;top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;z-index:999;display:none;box-shadow:0 6px 20px rgba(0,0,0,0.08)}
+    .save-mode .row{display:flex;gap:6px;align-items:center}
+    .save-mode .title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    .tag-suggestions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+    .suggestion{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:6px 8px;border-radius:10px;background:var(--suggestion-bg);color:var(--suggestion-color);
+      border:1px solid rgba(0,0,0,0.04); font-size:12px; cursor:pointer; box-shadow:0 1px 0 rgba(0,0,0,0.02);
+      transition:transform .08s ease, box-shadow .08s ease;
+    }
+    .suggestion:hover{ transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+
+    /* BOOKMARKS inline in-flow */
+    .bm-dropdown-inline{
+      display:none; box-sizing:border-box; border:1px solid var(--border); border-radius:8px; padding:8px;
+      background:var(--card); margin-top:6px;
+    }
+    .bm-dropdown-inline .toolbar{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+    .bm-dropdown-inline .search{flex:1;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);min-width:0}
+    .bm-dropdown-inline .list{
+      max-height:calc(var(--popup-max-height) * 0.7);
+      overflow:auto; padding:4px;
+      display:flex; flex-direction:column; gap:8px;
+    }
+
+    .bm-row-compact{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px;border-radius:8px;background:var(--card);border:1px solid var(--border);min-height:36px}
+    .bm-card{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:8px;background:var(--card);border:1px solid var(--border);min-height:72px}
+
+    .tag{font-size:11px;padding:4px 6px;border-radius:999px;background:transparent;border:1px solid var(--border);color:var(--muted);display:inline-block;margin-right:6px;margin-top:4px}
+
+    @media (max-width:380px){
+      :root{ --popup-width:360px; --popup-max-height:480px; --control-padding:5px 6px; --btn-font:11px; }
+      .summary{ max-height: calc(var(--popup-max-height) * 0.18); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="mainContainer">
+    <div class="top">
+      <div class="favicon" id="favicon"><img id="faviconImg" src="" style="width:100%;height:100%;object-fit:contain;display:none" /></div>
+      <div class="titleblock">
+        <div id="title" class="title">Detecting article...</div>
+        <div id="meta" class="meta">...</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <button id="themeBtn" class="theme-btn">Toggle Theme</button>
+      </div>
+    </div>
+
+    <div class="summary-card" id="summaryCard">
+      <div id="summary" class="summary">Waiting for article extraction...</div>
+      <div style="margin-top:6px"><span id="moreToggle" class="muted" style="display:none;cursor:pointer">Show more</span></div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-left">
+        <button id="saveBtn" class="primary">Save</button>
+        <button id="refreshBtn">Refresh</button>
+        <button id="bookmarksBtn" title="Open bookmarks">Bookmarks ▾</button>
+      </div>
+
+      <div style="flex:1"></div>
+
+      <div class="muted" style="align-self:center">Sentences</div>
+      <input id="sentencesInput" type="number" min="1" max="8" value="2" style="width:56px">
+
+      <div id="snapPlaceholder" style="display:flex;gap:6px;align-items:center;"></div>
+    </div>
+
+    <div class="save-row">
+      <input id="tagsInput" type="text" placeholder="Custom tags (comma separated)" class="tags-input" style="display:none" />
+      <select id="tagFilter" style="display:none"><option value="">Filter by tag (all)</option></select>
+    </div>
+
+    <div class="divider" role="separator"></div>
+
+    <!-- BOOKMARKS INLINE -->
+    <div id="bmInline" class="bm-dropdown-inline" aria-hidden="true">
+      <div class="toolbar">
+        <input id="dropdownSearch" class="search" placeholder="Search bookmarks..." />
+        <button id="dropdownClear">Clear</button>
+      </div>
+      <div id="dropdownList" class="list"></div>
+    </div>
+
+  </div>
+
+  <!-- SAVE-MODE overlay (tags only) -->
+  <div id="saveMode" class="save-mode" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div id="saveTitle" class="title">Save article</div>
+        <div id="saveMeta" class="muted" style="font-size:11px;margin-top:4px">Add tags and confirm save</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="cancelSaveBtn">Cancel</button>
+        <button id="confirmSaveBtn" class="primary">Confirm</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <input id="saveTagsInput" type="text" class="tags-input" placeholder="Enter tags (comma separated)" />
+      <div id="saveTagSuggestions" class="tag-suggestions" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="textrank.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
