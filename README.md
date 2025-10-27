@@ -8,13 +8,12 @@ A lightweight Chrome Extension that detects news articles and summarizes them in
 
 <img width="455" height="327" alt="image" src="https://github.com/user-attachments/assets/ae10e03c-c8ee-4c78-8f9e-4960c49990d8" />
 
-
+---
 
 <img width="442" height="312" alt="image" src="https://github.com/user-attachments/assets/701b0b04-1a5b-4e45-a465-563d68860355" />
 
 
 
-*Add your screenshots in a `screenshots/` folder*
 
 ---
 
